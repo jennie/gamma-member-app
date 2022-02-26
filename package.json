@@ -7,6 +7,9 @@
     "explore": "gridsome explore"
   },
   "dependencies": {
-    "gridsome": "^0.7.0"
+    "gridsome": "^0.7.0",
+    "netlify-identity-widget": "^1.9.2",
+    "node-fetch": "^2.6.7",
+    "stripe": "^8.205.0"
   }
 }
