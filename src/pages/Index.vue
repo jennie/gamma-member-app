@@ -1,110 +1,94 @@
 <template>
   <Layout>
-    <h1>Hello!</h1>
-    <p>Name:</p>
-    <p>Membership level:</p>
-
     <h1>Gamma Space Membership</h1>
-    <h2 id="salutation">Hello!</h2>
-    <div class="user-info">
-      <button id="left">Log In</button>
-      <button id="right">Sign Up</button>
+    {{ $store.state }}
+    <pre>{{ JSON.stringify(user, null, 2) }}</pre>
+    <div class="user-info" v-if="!user">
+      <button id="left" @click="login()">Log In</button>
+      <button id="right" @click="signup()">Sign Up</button>
     </div>
-
-    <div class="corgi-content">
-      <div class="content">
-        <h2>Free Content</h2>
-        <div class="free"></div>
-      </div>
-      <div class="content">
-        <h2>Friend Content</h2>
-        <div class="friend"></div>
-      </div>
-      <div class="content">
-        <h2>Member Content</h2>
-        <div class="member"></div>
-      </div>
+    <div v-else>
+      <h2 id="salutation">Hello {{ user.name }}!</h2>
+      <p>
+        You're currently on the
+        <strong>{{ user.roles[0] }}</strong> plan. Your email on file is
+        {{ user.email }}.
+      </p>
+      <!-- <pre>{{ JSON.stringify(user, null, 2) }}</pre> -->
+      <button @click="createManageLink(user)">Billing Portal</button>
+      <button @click="logout()">Log out</button>
+      <div id="content"></div>
     </div>
-    <template id="content">
-      <figure class="content-display">
-        <img />
-        <figcaption>
-          <a class="credit"></a>
-        </figcaption>
-      </figure>
-    </template>
   </Layout>
 </template>
 
 <script>
+import netlifyIdentity from "netlify-identity-widget";
+import jwtDecode from "jwt-decode";
+import { mapGetters } from "vuex";
+
 export default {
+  computed: {
+    ...mapGetters(["currentUser"]),
+
+    user: {
+      get() {
+        return this.currentUser;
+      },
+      set(value) {
+        this.$store.commit("setId", value);
+      },
+    },
+  },
+  // data() {
+  //   return {
+  //     user: null,
+  //   };
+  // },
+
   mounted() {
-    const netlifyIdentity = require("netlify-identity-widget");
     netlifyIdentity.init({
-      APIUrl: "https://gamma-member-app.netlify.app/.netlify/identity",
+      APIUrl: process.env.NETLIFY_IDENTITY_URL,
     });
-    const button1 = document.getElementById("left");
-    const button2 = document.getElementById("right");
-    const login = () => netlifyIdentity.open("login");
-    const signup = () => netlifyIdentity.open("signup");
+    this.user = this.$store.state.user;
+    console.log(`user: ${this.user}`);
+    console.log("mounted!");
+    this.handleUserStateChange();
 
-    // by default, add login and signup functionality
-    button1.addEventListener("click", login);
-    button2.addEventListener("click", signup);
+    // netlifyIdentity.on("init", this.handleUserStateChange);
+    netlifyIdentity.on("login", this.handleUserStateChange);
+    netlifyIdentity.on("logout", this.handleUserStateChange);
+  },
+  methods: {
+    login() {
+      netlifyIdentity.open("login");
+    },
+    signup() {
+      netlifyIdentity.open("signup");
+    },
+    logout() {
+      netlifyIdentity.logout();
+    },
+    updateUserInfo(user) {},
+    createManageLink(user) {
+      const token = user ? netlifyIdentity.currentUser().jwt(true) : false;
+      fetch("/.netlify/functions/create-manage-link", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+        .then((res) => res.json())
+        .then((link) => {
+          window.location.href = link;
+        })
+        .catch((err) => console.error(err));
+    },
+    loadSubscriptionContent(user) {
+      console.log("loading sub content");
 
-    const updateUserInfo = (user) => {
-      const container = document.querySelector(".user-info");
+      const token = user ? netlifyIdentity.currentUser().jwt(true) : false;
 
-      // cloning the buttons removes existing event listeners
-      const b1 = button1.cloneNode(true);
-      const b2 = button2.cloneNode(true);
-
-      // empty the user info div
-      container.innerHTML = "";
-      if (user) {
-        console.log(user);
-        console.log(user);
-        console.log(user);
-        const salutation = document.getElementById("salutation");
-        salutation.innerText = `Hello ${
-          user.user_metadata.full_name
-        }! Your role is ${user.app_metadata.roles}.`;
-        b1.innerText = "Log Out";
-        b1.addEventListener("click", () => {
-          netlifyIdentity.logout();
-        });
-
-        b2.innerText = "Manage Subscription";
-        b2.addEventListener("click", () => {
-          fetch("/.netlify/functions/create-manage-link", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${user.token.access_token}`,
-            },
-          })
-            .then((res) => res.json())
-            .then((link) => {
-              window.location.href = link;
-            })
-            .catch((err) => console.error(err));
-        });
-      } else {
-        // if no one is logged in, show login/signup options
-        b1.innerText = "Log In";
-        b1.addEventListener("click", login);
-
-        b2.innerText = "Sign Up";
-        b2.addEventListener("click", signup);
-      }
-
-      // add the updated buttons back to the user info div
-      container.appendChild(b1);
-      container.appendChild(b2);
-    };
-    const loadSubscriptionContent = async (user) => {
-      const token = user
-        ? await netlifyIdentity.currentUser().jwt(true)
-        : false;
       ["free", "friend", "member"].forEach((type) => {
         fetch("/.netlify/functions/get-protected-content", {
           method: "POST",
@@ -141,14 +125,26 @@ export default {
             container.appendChild(content);
           });
       });
-    };
-    const handleUserStateChange = (user) => {
-      updateUserInfo(user);
-      loadSubscriptionContent(user);
-    };
-    netlifyIdentity.on("init", handleUserStateChange);
-    netlifyIdentity.on("login", handleUserStateChange);
-    netlifyIdentity.on("logout", handleUserStateChange);
+    },
+    async handleUserStateChange() {
+      console.log("handling state change");
+      const user = netlifyIdentity.currentUser();
+      // console.log(user);
+      if (!user) {
+        this.$store.commit("setId", null);
+        return;
+      }
+      const token = await user.jwt(true);
+      const data = jwtDecode(token);
+      console.log(data);
+      this.$store.commit("setId", data.sub);
+      this.$store.commit("setName", data.user_metadata.full_name);
+      this.$store.commit("setEmail", data.email);
+      this.$store.commit("setRoles", data.app_metadata.roles);
+
+      // this.updateUserInfo(user);
+      // this.loadSubscriptionContent(user);
+    },
   },
 };
 </script>
