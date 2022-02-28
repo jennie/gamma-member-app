@@ -1,9 +1,7 @@
 <template>
   <Layout>
     <h1>Gamma Space Membership</h1>
-    {{ $store.state }}
-    <pre>{{ JSON.stringify(user, null, 2) }}</pre>
-    <div class="user-info" v-if="!user">
+    <div class="user-info" v-if="!user.user_id">
       <button id="left" @click="login()">Log In</button>
       <button id="right" @click="signup()">Sign Up</button>
     </div>
@@ -51,8 +49,7 @@ export default {
       APIUrl: process.env.NETLIFY_IDENTITY_URL,
     });
     this.user = this.$store.state.user;
-    console.log(`user: ${this.user}`);
-    console.log("mounted!");
+
     this.handleUserStateChange();
 
     // netlifyIdentity.on("init", this.handleUserStateChange);
@@ -77,6 +74,7 @@ export default {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        body: user.user_id,
       })
         .then((res) => res.json())
         .then((link) => {
